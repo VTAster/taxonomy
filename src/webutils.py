@@ -1,16 +1,20 @@
-import io, time
+import os, io, time, json
 import requests, lxml
 from PIL import Image
 from bs4 import BeautifulSoup as bs
+from ete3 import ImgFace
 
 class wikiScraper:
-    def __init__(self, data):
-        self.headers = data['headers']
-        self.api = data['wikiAPI']
-        self.params = data['thumbnailFetch']
-        self.ranks = data['ranks']
+    def __init__(self):
+        self.root = os.getcwd()
+        self.data = json.load(open(self.root + '/taxa.json', 'r'))
+        
+        self.headers = self.data['headers']
+        self.api = self.data['wikiAPI']
+        self.ranks = self.data['ranks']
     
     def getThumbnails(self, t, size=200, column=0, position='aligned'):
+        self.params = self.data['thumbnailFetch']
         queries = []
         
         names = {}
@@ -39,7 +43,7 @@ class wikiScraper:
         dontScrape = []
         for taxa, url in urls.items():
             filename = url.split('/')[-1]
-            filedir = '{}/images/{}'.format(root, filename)
+            filedir = '{}/images/{}'.format(self.root, filename)
             try:
                 image = Image.open(filedir)
                 for node in t.iter_leaves():
@@ -87,7 +91,7 @@ class wikiScraper:
             bytes = io.BytesIO(url_content)
 
             filename = url.split('/')[-1]
-            directory = root + '/images/' + filename
+            directory = self.root + '/images/' + filename
 
             image = Image.open(bytes).convert('RGB')
             with open(directory, 'wb') as f:

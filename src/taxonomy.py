@@ -1,9 +1,6 @@
-import os
-import json
-from ete3 import Tree, NCBITaxa, TreeStyle, NodeStyle, faces, ImgFace, TextFace, AttrFace
-
-root = os.getcwd()
-ncbi = NCBITaxa()
+import webutils
+import os, json
+from ete3 import Tree, NCBITaxa, TreeStyle, NodeStyle, faces, AttrFace
 
 # ------------------------------
 # TREE LAYOUT FUNCTIONS AND STYLES
@@ -79,14 +76,22 @@ def getParent(taxid, rank, mode='taxid'):
             if mode == 'name':
                 return ncbi.get_taxid_translator([parent])[parent]
 
-# debug
-taxa = open(root + '/taxa.json', 'r')
-data = json.load(taxa)
+# debug main function
+def main():
+    global root
+    global data
+    
+    root = os.getcwd()
+    data = json.load(open(root + '/taxa.json', 'r'))
+    
+    ncbi = NCBITaxa()
 
-t = ncbi.get_descendant_taxa(58019, return_tree=True)
-pruneToRank(t, 'order')
+    t = ncbi.get_descendant_taxa(58019, return_tree=True)
+    pruneToRank(t, 'family')
 
-wiki = wikiScraper(data)
-wiki.getThumbnails(t)
+    wiki = webutils.wikiScraper()
+    wiki.getThumbnails(t)
 
-t.render("%%inline", layout=rankedLayout)
+    t.show(layout=rankedLayout)
+    
+if __name__ == '__main__': main()
