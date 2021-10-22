@@ -5,16 +5,16 @@ from ete3 import Tree, NCBITaxa, TreeStyle, NodeStyle, faces, AttrFace
 # ------------------------------
 # TREE LAYOUT FUNCTIONS AND STYLES
 
-# LAYOUT FUNCTIONS
+# Adds attribute faces for scientific names and ranks; base function to be used in other layouts
 def taxaNameplate(node):
     faces.add_face_to_node(AttrFace("sci_name"), node, column=0)
     faces.add_face_to_node(AttrFace("rank"), node, column=0)
-    
+
+# Colors nodes based on rank, using predetermined palette; (Includes taxa nameplate layout)
 def rankedLayout(node):
     palette = data['rankedPalette']
     
     taxaNameplate(node)
-    
     for rank in palette.keys():
         if node.rank == rank:
             nstyle = NodeStyle()
@@ -24,6 +24,7 @@ def rankedLayout(node):
 # ------------------------------
 # NCBI TREE FUNCTIONS
 
+# Takes an NCBI tree and a given rank, removes all nodes of lower ranks
 def pruneToRank(t, rank, unclassified=False, clean=True):
     ranks = data['ranks']
     if clean:
@@ -34,13 +35,13 @@ def pruneToRank(t, rank, unclassified=False, clean=True):
         rank = ranks.index(rank)
     
     if type(rank) == int and rank <= len(ranks) - 1: 
-        ''' Iterates through all ranks, starting from the lowest
-         Deletes all nodes with ranks lower than given rank
-         Deletes all descendants of nodes of given rank '''
+        # Iterates through all ranks, starting from the lowest
         for r in reversed(ranks):
+            # Detaches all nodes with ranks lower than given rank
             if ranks.index(r) > rank:
                 for node in t.search_nodes(rank=r):
                     node.detach()
+            # Detaches all descendants of nodes of given rank
             if ranks.index(r) == rank:
                 for node in t.search_nodes(rank=r):
                     for subnode in node.iter_descendants():
@@ -59,6 +60,7 @@ def pruneToRank(t, rank, unclassified=False, clean=True):
     else:
         print("Invalid Rank Type - Requires Valid Rank String or Int Between 0 and 26")
 
+# removes 'environmental samples' nodes and taxa that have been replaced
 def cleanTree(t):
     for node in t.iter_descendants():
         if 'environmental' in node.sci_name:
@@ -66,7 +68,7 @@ def cleanTree(t):
         if node.sci_name in data['oldTaxa']:
             node.detach()
         
-''' returns parent of given taxa of given rank '''
+# returns parent of given taxa of given rank
 def getParent(taxid, rank, mode='taxid'):
     lineage = ncbi.get_lineage(taxid)
     for parent in lineage:
@@ -76,7 +78,8 @@ def getParent(taxid, rank, mode='taxid'):
             if mode == 'name':
                 return ncbi.get_taxid_translator([parent])[parent]
 
-# debug main function
+# ------------------------------           
+# main function currently for testing only
 def main():
     global root
     global data
