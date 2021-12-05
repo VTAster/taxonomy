@@ -1,100 +1,146 @@
-import webutils
-import os, json
-from ete3 import Tree, NCBITaxa, TreeStyle, NodeStyle, faces, AttrFace
+from webutilities import *
+from taxutilities import *
+from ete3 import Tree, NCBITaxa, TreeStyle, NodeStyle, faces, AttrFace, ImgFace
 
-# ------------------------------
-# TREE LAYOUT FUNCTIONS AND STYLES
+class Taxonomy:
+    def __init__(self):
+        self.root = os.getcwd()
+        self.data = json.load(open(os.path.join(root, 'taxa.json')))
+        self.ranks = self.data['ranks']
+        self.ncbi = NCBITaxa()
+        self.wiki = wikiScraper()
 
-# Adds attribute faces for scientific names and ranks; base function to be used in other layouts
-def taxaNameplate(node):
-    faces.add_face_to_node(AttrFace("sci_name"), node, column=0)
-    faces.add_face_to_node(AttrFace("rank"), node, column=0)
-
-# Colors nodes based on rank, using predetermined palette; (Includes taxa nameplate layout)
-def rankedLayout(node):
-    palette = data['rankedPalette']
-    
-    taxaNameplate(node)
-    for rank in palette.keys():
-        if node.rank == rank:
-            nstyle = NodeStyle()
-            nstyle['bgcolor'] = palette[rank]
-            node.set_style(nstyle)
-
-# ------------------------------
-# NCBI TREE FUNCTIONS
-
-# Takes an NCBI tree and a given rank, removes all nodes of lower ranks
-def pruneToRank(t, rank, unclassified=False, clean=True):
-    ranks = data['ranks']
-    if clean:
-        cleanTree(t)
-    
-    # converts str rank input to int
-    if (type(rank)) == str and rank in ranks:
-        rank = ranks.index(rank)
-    
-    if type(rank) == int and rank <= len(ranks) - 1: 
-        # Iterates through all ranks, starting from the lowest
-        for r in reversed(ranks):
-            # Detaches all nodes with ranks lower than given rank
-            if ranks.index(r) > rank:
-                for node in t.search_nodes(rank=r):
-                    node.detach()
-            # Detaches all descendants of nodes of given rank
-            if ranks.index(r) == rank:
-                for node in t.search_nodes(rank=r):
-                    for subnode in node.iter_descendants():
-                        subnode.detach()
+    def getThumbnails(self, t, size=200, column=0, position='aligned'):
+        urls = self.thumbnailUrls(t, size)
+        thumbnails = {}
+        for taxa, url in urls.items():
+            filedir = os.path.join(self.root, 'images', url.split('/')[-1])
+            
+            if os.path.exists(filedir):
+                print(f"Using image from memory for {taxa}")
+            else:
+                print(f"Scraping thumbnail for {taxa}")
+                saveImage(url)
+                
+            thumbnails[taxa] = filedir         
         
-        # If unclassified is not true, remove unclassified clades with no valid descendants
-        if not unclassified:
-            for node in t.iter_descendants():
-                if 'unclassified' in node.sci_name or 'incertae' in node.sci_name:
-                    keep = False
-                    for subnode in node.iter_descendants():
-                        if subnode.rank in ranks:
-                            keep = True
-                    if not keep:        
-                        node.detach()
-    else:
-        print("Invalid Rank Type - Requires Valid Rank String or Int Between 0 and 26")
-
-# removes 'environmental samples' nodes and taxa that have been replaced
-def cleanTree(t):
-    for node in t.iter_descendants():
-        if 'environmental' in node.sci_name:
-            node.detach()
-        if node.sci_name in data['oldTaxa']:
-            node.detach()
+        for node in t.iter_leaves():
+            if node.sci_name in thumbnails.keys():
+                node.add_face(ImgFace(thumbnails[node.sci_name]), column=column, position=position)
+                        
+    def thumbnailUrls(self, t, size):
+        # Compile names and ranks of the trees leaves
+        taxa = {}
+        for node in t.iter_leaves():
+            taxa[node.sci_name] = node.rank
         
-# returns parent of given taxa of given rank
-def getParent(taxid, rank, mode='taxid'):
-    lineage = ncbi.get_lineage(taxid)
-    for parent in lineage:
-        if ncbi.get_rank([parent])[parent] == rank:
-            if mode == 'taxid':
-                return parent
-            if mode == 'name':
-                return ncbi.get_taxid_translator([parent])[parent]
+        # Get list of queries using names and ranks
+        queries = self.thumbnailQueries(taxa, size)
+        
+        # Compiles pages into a single list
+        pages = []
+        for query in queries:
+            for page in query['pages'].values():
+                pages.append(page)
+                
+        # Matches names with urls
+        urls = {}
+        for name in taxa:
+            for page in pages:
+                if name in page['title']:
+                    try:
+                        urls[name] = page['thumbnail']['source']
+                    except:
+                        continue
+            
+        # Attempts to find thumbnails for missed taxa
+        for node in t.iter_leaves():
+            if node.sci_name not in urls.keys() and node.rank in self.ranks and self.ranks.index(node.rank) < self.ranks.index('species'):
+                node_t = ncbi.get_descendant_taxa(node.name, return_tree=True)
+                node_taxa = {}
+                if type(node_t) is not list:
+                    for subnode in node_t.iter_leaves():
+                        node_taxa[subnode.sci_name] = subnode.rank
 
-# ------------------------------           
-# main function currently for testing only
+                    node_queries = self.thumbnailQueries(node_taxa, size)
+                    node_pages = []
+                    for query in node_queries:
+                        for page in query['pages'].values():
+                            node_pages.append(page)
+
+                    for name in node_taxa:
+                        for page in node_pages:
+                            if name in page['title']:
+                                try:
+                                    urls[node.sci_name] = page['thumbnail']['source']
+                                except:
+                                    continue
+                        
+        return urls
+    
+    def thumbnailQueries(self, taxa, size):
+        params = {'prop': 'pageimages', 'piprop': 'thumbnail', 'pithumbsize': size}
+        
+        queries = []
+        
+        # Creates list of queries for each 48/49 titles
+        titles = []
+        for name, rank in taxa.items():
+            titles.append(name)
+            
+            if rank in self.ranks and self.ranks.index(rank) < self.ranks.index('family'):
+                fam = getParent(name, rank='family', mode='name')
+                titles.append(f'{name} ({fam})')
+                
+            if len(titles) >= 48:
+                params['titles'] = '|'.join(titles)
+                query = self.wiki.query(params=params)
+                if query is not None:
+                    queries.append(query)
+                
+                titles = []
+                params['titles'] = ''
+                
+        if len(titles) > 0:
+            params['titles'] = '|'.join(titles)
+            query = self.wiki.query(params=params)
+            if query is not None:
+                queries.append(query)
+                
+        return queries
+        
+    # All-in-one function for getting a formatted tree with optional thumbnails for a given taxid
+    def getTree(self, taxa, rank='family', unclassified=False, clean=True, thumbnails=True):
+        # Convert scientific name to taxid
+        if type(taxa) == str:
+            taxa = self.ncbi.get_name_translator([taxa])[taxa][0]
+            
+        # Takes taxid and gets tree of its descendants, prunes it
+        if type(taxa) == int:
+            tree = self.ncbi.get_descendant_taxa(taxa, return_tree=True)
+            prunedTree = pruneToRank(tree, rank)
+
+            if prunedTree != None:
+                if thumbnails:
+                    self.getThumbnails(prunedTree)
+                return prunedTree
+
+# Main function for demonstrating and testing functionality
 def main():
-    global root
-    global data
+    tax = Taxonomy()
     
-    root = os.getcwd()
-    data = json.load(open(root + '/taxa.json', 'r'))
+    taxa = input("Enter a Scientific Name: ")
+    mode = input("What would you like to do? (Get a tree (T) | Get a distribution map (M))")
     
-    ncbi = NCBITaxa()
-
-    t = ncbi.get_descendant_taxa(58019, return_tree=True)
-    pruneToRank(t, 'family')
-
-    wiki = webutils.wikiScraper()
-    wiki.getThumbnails(t)
-
-    t.show(layout=rankedLayout)
+    if mode == 'T' or mode == 't':
+        rank = input("What taxonomic rank do you want your tree to display? ").lower()
+        taxaTree = tax.getTree(taxa, rank=rank)
+        saveTree(taxaTree)
+    elif mode == 'M' or mode == 'm':
+        potwo = POTWOScraper()
+        distribution = potwo.getDistribution(taxa)
+        
+        maps = MapMaker()
+        m = maps.distributionMap(distribution)
     
 if __name__ == '__main__': main()
