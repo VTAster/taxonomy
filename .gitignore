@@ -3,7 +3,6 @@
 **/src/syn.tab
 **/src/taxa.tab
 **/src/taxdump.tar.gz
-**/src/trees/**
 **/src/temp
 **/src/maps
 **/src/__pycache__
