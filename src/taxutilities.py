@@ -86,12 +86,9 @@ def saveTree(tree, _format='svg', layout=rankedLayout):
 
 # returns parent at specified rank of given taxa
 def getParent(taxa, rank, mode='taxid'):
-    if type(taxa) == str:
-        taxid = ncbi.get_name_translator([taxa])[taxa]
-    elif type(taxa) == int:
-        taxid = taxa
+    taxa = getTaxid(taxa)
     
-    lineage = ncbi.get_lineage(taxid)
+    lineage = ncbi.get_lineage(taxa)
     for parent in lineage:
         if ncbi.get_rank([parent])[parent] == rank:
             if mode == 'taxid':
@@ -101,13 +98,28 @@ def getParent(taxa, rank, mode='taxid'):
 
 # takes single scientific name and returns single corresponding taxid
 def getTaxid(taxa):
-    taxid = ncbi.get_name_translator([taxa])[taxa][0]
-    return taxid
+    if type(taxa) == int:
+        return taxa
+    else:
+        for spec_char, char in data['specialChars'].items():
+            taxa.replace(spec_char, char)
+
+        taxa_to_taxid = ncbi.get_name_translator([taxa]).get(taxa)
+        if taxa_to_taxid is not None:
+            taxid = taxa_to_taxid[0]
+            return taxid
     
 # takes single taxid and returns single corresponding scientific name         
-def getName(taxid):
-    taxa = ncbi.get_taxid_translator([taxid])[taxid]
-    return taxa
+def getName(taxa):
+    if type(taxa) == str:
+        for spec_char, char in data['specialChars'].items():
+            taxa.replace(spec_char, char)
+        return taxa
+    else:
+        taxid_to_taxa = ncbi.get_taxid_translator([taxa]).get(taxa)
+        if taxid_to_taxa is not None:
+            taxa = taxid_to_taxa
+            return taxa
 
 # takes single taxa and returns single corresponding rank
 def getRank(taxa):

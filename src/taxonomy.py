@@ -49,10 +49,13 @@ class Taxonomy:
             for page in pages:
                 if name in page['title']:
                     try:
-                        urls[name] = page['thumbnail']['source']
+                        if any(i in page['thumbnail']['source'] for i in self.data['genericImages']):
+                            continue
+                        else:
+                            urls[name] = page['thumbnail']['source']
                     except:
                         continue
-            
+        
         # Attempts to find thumbnails for missed taxa
         for node in t.iter_leaves():
             if node.sci_name not in urls.keys() and node.rank in self.ranks and self.ranks.index(node.rank) < self.ranks.index('species'):
@@ -72,10 +75,13 @@ class Taxonomy:
                         for page in node_pages:
                             if name in page['title']:
                                 try:
-                                    urls[node.sci_name] = page['thumbnail']['source']
+                                    if any(i in page['thumbnail']['source'] for i in self.data['genericImages']):
+                                        continue
+                                    else:
+                                        urls[node.sci_name] = page['thumbnail']['source']
                                 except:
                                     continue
-                        
+                                            
         return urls
     
     def thumbnailQueries(self, taxa, size):
@@ -111,36 +117,30 @@ class Taxonomy:
         
     # All-in-one function for getting a formatted tree with optional thumbnails for a given taxid
     def getTree(self, taxa, rank='family', unclassified=False, clean=True, thumbnails=True):
-        # Convert scientific name to taxid
-        if type(taxa) == str:
-            taxa = self.ncbi.get_name_translator([taxa])[taxa][0]
-            
-        # Takes taxid and gets tree of its descendants, prunes it
-        if type(taxa) == int:
-            tree = self.ncbi.get_descendant_taxa(taxa, return_tree=True)
-            prunedTree = pruneToRank(tree, rank)
+        taxa = getTaxid(taxa)
+        
+        tree = self.ncbi.get_descendant_taxa(taxa, return_tree=True)
+        
+        prunedTree = pruneToRank(tree, rank)\
+        
+        if prunedTree != None:
+            if thumbnails:
+                self.getThumbnails(prunedTree)
+            return prunedTree
 
-            if prunedTree != None:
-                if thumbnails:
-                    self.getThumbnails(prunedTree)
-                return prunedTree
-
-# Main function for demonstrating and testing functionality
 def main():
     tax = Taxonomy()
     
-    taxa = input("Enter a Scientific Name: ")
-    mode = input("What would you like to do? (Get a tree (T) | Get a distribution map (M))")
+    taxa = input("Enter a Taxa (Scientific Name or NCBI ID): ")
+    rank = input("Rank: ").lower()
     
-    if mode == 'T' or mode == 't':
-        rank = input("What taxonomic rank do you want your tree to display? ").lower()
-        taxaTree = tax.getTree(taxa, rank=rank)
-        saveTree(taxaTree)
-    elif mode == 'M' or mode == 'm':
-        potwo = POTWOScraper()
-        distribution = potwo.getDistribution(taxa)
-        
-        maps = MapMaker()
-        m = maps.distributionMap(distribution)
+    response = input("Thumbnails? (Y|N)").lower()
+    if response == 'y' or response == 'yes':
+        thumbnails = True
+    else:
+        thumbnails = False
+    
+    tree = tax.getTree(taxa, rank=rank)
+    saveTree(tree)
     
 if __name__ == '__main__': main()
