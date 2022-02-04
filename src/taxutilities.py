@@ -39,6 +39,7 @@ def pruneToRank(tree, rank, unclassified=False, clean=True):
     if (type(rank)) == str and rank in ranks:
         rank = ranks.index(rank)
     
+    # Returns nothing if rank is invalid
     if type(rank) == int and rank <= len(ranks) - 1: 
         # Iterates through all ranks, starting from the lowest
         for r in reversed(ranks):
@@ -66,7 +67,7 @@ def pruneToRank(tree, rank, unclassified=False, clean=True):
     else:
         print("Invalid Rank Type - Requires Valid Rank String or Int Between 0 and 26")
         return None
-
+    
 # removes 'environmental samples' nodes and taxa that have been replaced
 def cleanTree(t):
     for node in t.iter_descendants():

@@ -119,14 +119,18 @@ class Taxonomy:
     def getTree(self, taxa, rank='family', unclassified=False, clean=True, thumbnails=True):
         taxa = getTaxid(taxa)
         
-        tree = self.ncbi.get_descendant_taxa(taxa, return_tree=True)
-        
-        prunedTree = pruneToRank(tree, rank)\
-        
-        if prunedTree != None:
-            if thumbnails:
-                self.getThumbnails(prunedTree)
-            return prunedTree
+        if taxa is not None:
+            tree = self.ncbi.get_descendant_taxa(taxa, return_tree=True)
+
+            prunedTree = pruneToRank(tree, rank)\
+
+            if prunedTree != None:
+                if thumbnails:
+                    self.getThumbnails(prunedTree)
+                return prunedTree
+        else:
+            print('Taxa invalid, try again')
+            return
 
 def main():
     tax = Taxonomy()
@@ -141,6 +145,7 @@ def main():
         thumbnails = False
     
     tree = tax.getTree(taxa, rank=rank)
-    saveTree(tree)
+    if tree is not None:
+        saveTree(tree)
     
 if __name__ == '__main__': main()
