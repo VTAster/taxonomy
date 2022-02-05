@@ -10,6 +10,9 @@ class Taxonomy:
         self.ncbi = NCBITaxa()
         self.wiki = wikiScraper()
 
+    ''' One-step thumbnail function, takes ncbi tree,
+        uses urls to download all thumbnails that haven't been downloaded yet,
+        then attaches them as image face to corresponding nodes on the tree'''
     def getThumbnails(self, t, size=200, column=0, position='aligned'):
         urls = self.thumbnailUrls(t, size)
         thumbnails = {}
@@ -27,7 +30,10 @@ class Taxonomy:
         for node in t.iter_leaves():
             if node.sci_name in thumbnails.keys():
                 node.add_face(ImgFace(thumbnails[node.sci_name]), column=column, position=position)
-                        
+    
+    ''' Major sub function, takes ncbi tree and returns urls
+        from WikiSpecies for thumbnails that correspond
+        to each leaf in the tree '''
     def thumbnailUrls(self, t, size):
         # Compile names and ranks of the trees leaves
         taxa = {}
@@ -84,12 +90,12 @@ class Taxonomy:
                                             
         return urls
     
+    ''' Batch queries taxa names 48/49 at once and returns list of queries '''
     def thumbnailQueries(self, taxa, size):
         params = {'prop': 'pageimages', 'piprop': 'thumbnail', 'pithumbsize': size}
         
         queries = []
         
-        # Creates list of queries for each 48/49 titles
         titles = []
         for name, rank in taxa.items():
             titles.append(name)
@@ -115,22 +121,82 @@ class Taxonomy:
                 
         return queries
         
-    # All-in-one function for getting a formatted tree with optional thumbnails for a given taxid
+    ''' All-in-one function for getting a formatted tree with optional thumbnails for a given taxid '''
     def getTree(self, taxa, rank='family', unclassified=False, clean=True, thumbnails=True):
         taxa = getTaxid(taxa)
         
         if taxa is not None:
             tree = self.ncbi.get_descendant_taxa(taxa, return_tree=True)
-
-            prunedTree = pruneToRank(tree, rank)\
-
-            if prunedTree != None:
+            prunedTree = self.pruneToRank(tree, rank)
+            if prunedTree is not None:
                 if thumbnails:
                     self.getThumbnails(prunedTree)
                 return prunedTree
         else:
             print('Taxa invalid, try again')
             return
+        
+    ''' Using multiple sub functions, 
+        takes an NCBI tree and a given rank, 
+        removes all nodes of lower ranks '''
+    def pruneToRank(self, t, rank, unclassified=False, clean=True):
+        if clean:
+            self.cleanTree(t)
+
+        prunedTree = self.detachLowerRanks(t, rank)
+        if prunedTree is not None:
+            # If unclassified is not true, remove unclassified clades with no valid descendants
+            if not unclassified:
+                self.removeUnclassified(prunedTree)
+            return prunedTree
+        else:
+            return
+    
+    ''' Removes all nodes below given rank
+        Starts by removing lowest ranks, then moves upward
+        Then removes subnodes of taxa at given rank '''
+    def detachLowerRanks(self, t, rank):
+        # Converts str rank input to int
+        if (type(rank)) == str and rank in self.ranks:
+            rank = self.ranks.index(rank)
+
+        if type(rank) == int and rank <= len(self.ranks) - 1:
+            for r in reversed(self.ranks):
+                if self.ranks.index(r) > rank:
+                    for node in t.search_nodes(rank=r):
+                        node.detach()
+                if self.ranks.index(r) == rank:
+                    for node in t.search_nodes(rank=r):
+                        for subnode in node.iter_descendants():
+                            subnode.detach()
+            return t
+        else:
+            print("Invalid Rank Type - Requires Valid Rank String or Int Between 0 and 26")
+            return None
+    
+    ''' Removes unclassified and incertae sedis taxa, if they have no valid subtaxa '''
+    def removeUnclassified(self, t):
+        for node in t.iter_descendants():
+            if 'unclassified' in node.sci_name or 'incertae' in node.sci_name:
+                keep = False
+                for subnode in node.iter_descendants():
+                    if subnode.rank in self.ranks:
+                        keep = True
+                if not keep:
+                    node.detach()
+
+    ''' Removes 'environmental samples' nodes and outdated taxa '''
+    def cleanTree(self, t):
+        for node in t.iter_descendants():
+            if 'environmental' in node.sci_name:
+                node.detach()
+            if node.sci_name in data['oldTaxa']:
+                node.detach()
+
+    ''' Renders given tree to given format, outputs to trees subdirectory '''
+    def saveTree(self, t, _format='svg', layout=rankedLayout):
+        directory = os.path.join(root, 'trees', f'{t.sci_name}.{_format}')
+        t.render(directory, layout=layout)
 
 def main():
     tax = Taxonomy()
@@ -138,14 +204,24 @@ def main():
     taxa = input("Enter a Taxa (Scientific Name or NCBI ID): ")
     rank = input("Rank: ").lower()
     
-    response = input("Thumbnails? (Y|N)").lower()
-    if response == 'y' or response == 'yes':
+    '''
+    savedTaxa = []
+    savedTaxaResponse = input("Would you like to keep any lower taxa (Y|N)").lower()
+    if savedTaxaResponse == 'y' or savedTaxaResponse == 'yes':
+        savedTaxaNames = input("Enter taxa names (i.e. 'taxa, taxa, taxa')").split(", ")
+        for name in savedTaxaNames:
+            nameToID = getTaxid(name)
+            savedTaxa.append(nameToID)
+    '''
+    
+    thumbnailsResponse = input("Thumbnails? (Y|N)").lower()
+    if thumbnailsResponse == 'y' or thumbnailsResponse == 'yes':
         thumbnails = True
     else:
         thumbnails = False
     
-    tree = tax.getTree(taxa, rank=rank)
+    tree = tax.getTree(taxa, rank=rank, thumbnails=thumbnails)
     if tree is not None:
-        saveTree(tree)
+        tax.saveTree(tree)
     
 if __name__ == '__main__': main()

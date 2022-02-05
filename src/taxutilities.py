@@ -23,64 +23,6 @@ def rankedLayout(node):
             nstyle = NodeStyle()
             nstyle['bgcolor'] = palette[rank]
             node.set_style(nstyle)
-            
-# ------------------------------
-# NCBI TREE FUNCTIONS
-
-# Takes an NCBI tree and a given rank, removes all nodes of lower ranks
-def pruneToRank(tree, rank, unclassified=False, clean=True):
-    prunedTree = tree
-    ranks = data['ranks']
-    
-    if clean:
-        cleanTree(prunedTree)
-    
-    # converts str rank input to int
-    if (type(rank)) == str and rank in ranks:
-        rank = ranks.index(rank)
-    
-    # Returns nothing if rank is invalid
-    if type(rank) == int and rank <= len(ranks) - 1: 
-        # Iterates through all ranks, starting from the lowest
-        for r in reversed(ranks):
-            # Detaches all nodes with ranks lower than given rank
-            if ranks.index(r) > rank:
-                for node in prunedTree.search_nodes(rank=r):
-                    node.detach()
-            # Detaches all descendants of nodes of given rank
-            if ranks.index(r) == rank:
-                for node in prunedTree.search_nodes(rank=r):
-                    for subnode in node.iter_descendants():
-                        subnode.detach()
-        
-        # If unclassified is not true, remove unclassified clades with no valid descendants
-        if not unclassified:
-            for node in prunedTree.iter_descendants():
-                if 'unclassified' in node.sci_name or 'incertae' in node.sci_name:
-                    keep = False
-                    for subnode in node.iter_descendants():
-                        if subnode.rank in ranks:
-                            keep = True
-                    if not keep:        
-                        node.detach()
-        return prunedTree
-    else:
-        print("Invalid Rank Type - Requires Valid Rank String or Int Between 0 and 26")
-        return None
-    
-# removes 'environmental samples' nodes and taxa that have been replaced
-def cleanTree(t):
-    for node in t.iter_descendants():
-        if 'environmental' in node.sci_name:
-            node.detach()
-        if node.sci_name in data['oldTaxa']:
-            node.detach()
-
-# renders given tree to given format, output in trees directory
-def saveTree(tree, _format='svg', layout=rankedLayout):
-    directory = os.path.join(root, 'trees', f'{tree.sci_name}.{_format}')
-    
-    tree.render(directory, layout=layout)
 
 # ------------------------------
 # TAXA UTILITIES
