@@ -145,9 +145,42 @@ class Taxonomy:
 
         prunedTree = self.detachLowerRanks(t, rank)
         if prunedTree is not None:
-            # If unclassified is not true, remove unclassified clades with no valid descendants
             if not unclassified:
                 self.removeUnclassified(prunedTree)
+            return prunedTree
+        else:
+            return
+        
+    ''' Takes an ncbi tree, a rank, and a list of lower taxa
+        Prunes to given rank while keeping given lower taxa intact
+    '''
+    def pruneTaxa(self, t, rank, taxa, unclassified=False, clean=True):
+        for key, tax in enumerate(taxa):
+            if type(tax) == str:
+                taxa[key] = getTaxid(tax)
+        
+        taxaParents = {}
+        for tax in taxa:
+            lineage = self.ncbi.get_lineage(tax)
+            for parent in lineage:
+                if getRank(parent) == rank:
+                    taxNode = self.pruneToRank(self.ncbi.get_descendant_taxa(tax, return_tree=True), rank=getRank(tax))
+                    taxaParents[taxNode] = parent
+        
+        if clean:
+            self.cleanTree(t)
+        
+        prunedTree = self.detachLowerRanks(t, rank)
+        if prunedTree is not None:
+            if not unclassified:
+                self.removeUnclassified(prunedTree)
+            if taxaParents:
+                for leaf in prunedTree.iter_leaves():
+                    if int(leaf.name) in taxaParents.values():
+                        for taxNode, parent in taxaParents.items():
+                            if int(leaf.name) == parent:
+                                leaf.add_child(taxNode)
+                            
             return prunedTree
         else:
             return
@@ -156,20 +189,21 @@ class Taxonomy:
         Starts by removing lowest ranks, then moves upward
         Then removes subnodes of taxa at given rank '''
     def detachLowerRanks(self, t, rank):
-        # Converts str rank input to int
+        prunedTree = t
+        
         if (type(rank)) == str and rank in self.ranks:
             rank = self.ranks.index(rank)
 
         if type(rank) == int and rank <= len(self.ranks) - 1:
             for r in reversed(self.ranks):
                 if self.ranks.index(r) > rank:
-                    for node in t.search_nodes(rank=r):
+                    for node in prunedTree.search_nodes(rank=r):
                         node.detach()
                 if self.ranks.index(r) == rank:
-                    for node in t.search_nodes(rank=r):
+                    for node in prunedTree.search_nodes(rank=r):
                         for subnode in node.iter_descendants():
                             subnode.detach()
-            return t
+            return prunedTree
         else:
             print("Invalid Rank Type - Requires Valid Rank String or Int Between 0 and 26")
             return None
@@ -201,10 +235,10 @@ class Taxonomy:
 def main():
     tax = Taxonomy()
     
+    '''
     taxa = input("Enter a Taxa (Scientific Name or NCBI ID): ")
     rank = input("Rank: ").lower()
     
-    '''
     savedTaxa = []
     savedTaxaResponse = input("Would you like to keep any lower taxa (Y|N)").lower()
     if savedTaxaResponse == 'y' or savedTaxaResponse == 'yes':
@@ -212,7 +246,6 @@ def main():
         for name in savedTaxaNames:
             nameToID = getTaxid(name)
             savedTaxa.append(nameToID)
-    '''
     
     thumbnailsResponse = input("Thumbnails? (Y|N)").lower()
     if thumbnailsResponse == 'y' or thumbnailsResponse == 'yes':
@@ -223,5 +256,6 @@ def main():
     tree = tax.getTree(taxa, rank=rank, thumbnails=thumbnails)
     if tree is not None:
         tax.saveTree(tree)
+    '''
     
 if __name__ == '__main__': main()
